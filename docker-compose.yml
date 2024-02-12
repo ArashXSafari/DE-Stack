@@ -1,0 +1,77 @@
+version: '3.7'
+
+services:
+  mysql:
+    image: mysql:latest
+    environment:
+      MYSQL_ROOT_PASSWORD: ${MYSQL_ROOT_PASSWORD}
+      AIRFLOW_DB: ${AIRFLOW_DB}
+      AIRFLOW_USER: ${AIRFLOW_USER}
+      AIRFLOW_PASSWORD: ${AIRFLOW_PASSWORD}
+      METABASE_DB: ${METABASE_DB}
+      METABASE_USER: ${METABASE_USER}
+      METABASE_PASSWORD: ${METABASE_PASSWORD}
+      FAKER_DB: ${FAKER_DB}
+      FAKER_USER: ${FAKER_USER}
+      FAKER_PASSWORD: ${FAKER_PASSWORD}
+    volumes:
+      - ./mysql/data:/var/lib/mysql
+      - ./mysql/initdb:/docker-entrypoint-initdb.d
+    ports:
+      - "3306:3306"
+
+  minio:
+    image: minio/minio:latest
+    volumes:
+      - ./minio/data:/data
+    ports:
+      - "9000:9000"
+    command: server /data
+    environment:
+      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+
+  dremio:
+    image: dremio/dremio-oss:latest
+    ports:
+      - "9047:9047"
+    volumes:
+      - ./dremio/data:/opt/dremio/data
+      - ./dremio/conf:/opt/dremio/conf
+
+  airflow:
+    image: apache/airflow:latest
+    environment:
+      - AIRFLOW__CORE__EXECUTOR=LocalExecutor
+      - AIRFLOW__CORE__SQL_ALCHEMY_CONN=mysql+mysqlconnector://${AIRFLOW_USER}:${AIRFLOW_PASSWORD}@${MYSQL_HOST}/${AIRFLOW_DB}
+      - AIRFLOW__CORE__LOAD_EXAMPLES=False
+    ports:
+      - "8080:8080"
+    volumes:
+      - ./airflow/dags:/opt/airflow/dags
+      - ./airflow/logs:/opt/airflow/logs
+      - ./airflow/plugins:/opt/airflow/plugins
+    depends_on:
+      - mysql
+
+  dbt:
+    image: ghcr.io/dbt-labs/dbt-core:latest
+    volumes:
+      - ./dbt:/dbt
+    command: dbt run
+
+  metabase:
+    image: metabase/metabase:latest
+    environment:
+      MB_DB_TYPE: mysql
+      MB_DB_DBNAME: ${METABASE_DB}
+      MB_DB_PORT: 3306
+      MB_DB_USER: ${METABASE_USER}
+      MB_DB_PASS: ${METABASE_PASSWORD}
+      MB_DB_HOST: ${MYSQL_HOST}
+    ports:
+      - "3000:3000"
+    depends_on:
+      - mysql
+    volumes:
+      - ./metabase/data:/metabase-data
